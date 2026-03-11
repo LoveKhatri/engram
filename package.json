@@ -1,0 +1,43 @@
+{
+  "name": "engram",
+  "version": "0.1.0",
+  "description": "Passive CLI daemon that captures terminal history and screenshots for semantic search",
+  "type": "commonjs",
+  "author": "",
+  "license": "ISC",
+  "keywords": [],
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "engram": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "dev": "tsx src/cli/index.ts",
+    "dev:daemon": "tsx src/daemon/index.ts",
+    "postinstall": "tsx scripts/postinstall.ts || true",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.6.0",
+    "chalk": "^4.1.2",
+    "chokidar": "^3.6.0",
+    "cli-progress": "^3.12.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "sqlite-vec": "^0.1.6",
+    "tesseract.js": "^5.1.1",
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cli-progress": "^3.11.6",
+    "@types/node": "^20.19.37",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
