@@ -34,11 +34,14 @@ export function registerDaemonCommands(program: Command): void {
       }
       // __dirname = dist/cli/ in prod; daemon is at dist/daemon/index.js
       const daemonPath = path.join(__dirname, '../daemon/index.js')
+      fs.mkdirSync(path.dirname(paths.logFile), { recursive: true })
+      const logFd = fs.openSync(paths.logFile, 'a')
       const child = spawn('node', [daemonPath], {
         detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', logFd, logFd],
       })
       child.unref()
+      fs.closeSync(logFd)
       console.log('Daemon started')
     })
 
