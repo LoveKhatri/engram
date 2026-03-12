@@ -14,39 +14,66 @@ interface ShellHookPayload {
   createdAt: number
 }
 
+function processLine(line: string, db: DB, provider: EmbeddingProvider): void {
+  const trimmed = line.trim()
+  if (!trimmed) return
+
+  logger.debug('TCP server: received line', trimmed.slice(0, 120))
+
+  let payload: ShellHookPayload
+  try {
+    payload = JSON.parse(trimmed) as ShellHookPayload
+  } catch (err) {
+    logger.warn('TCP server: malformed JSON line, skipping', trimmed.slice(0, 120))
+    return
+  }
+
+  const event: InsertEventInput = {
+    type: payload.type,
+    content: payload.content,
+    source: payload.source,
+    exitCode: payload.exitCode,
+    sessionId: payload.sessionId,
+    createdAt: payload.createdAt,
+  }
+
+  logger.debug('TCP server: dispatching event to pipeline', `type=${event.type}`)
+
+  processPipeline(event, db, provider).catch((err) => {
+    logger.error('Pipeline error', err instanceof Error ? err : new Error(String(err)))
+  })
+}
+
 export function startTcpServer(port: number, db: DB, provider: EmbeddingProvider): void {
   const server = net.createServer((socket) => {
     let buffer = ''
 
     socket.on('data', (chunk) => {
       buffer += chunk.toString()
+      logger.debug('TCP server: data received', `${chunk.length} bytes`)
+
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed) continue
+        processLine(line, db, provider)
+      }
+    })
 
-        let payload: ShellHookPayload
-        try {
-          payload = JSON.parse(trimmed) as ShellHookPayload
-        } catch {
-          logger.warn('TCP server: malformed JSON line, skipping', trimmed)
-          continue
-        }
+    socket.on('end', () => {
+      // Process any remaining data in the buffer when the connection closes
+      if (buffer.trim()) {
+        logger.debug('TCP server: processing remaining buffer on end')
+        processLine(buffer, db, provider)
+        buffer = ''
+      }
+    })
 
-        const event: InsertEventInput = {
-          type: payload.type,
-          content: payload.content,
-          source: payload.source,
-          exitCode: payload.exitCode,
-          sessionId: payload.sessionId,
-          createdAt: payload.createdAt,
-        }
-
-        processPipeline(event, db, provider).catch((err) => {
-          logger.error('Pipeline error', err instanceof Error ? err : new Error(String(err)))
-        })
+    socket.on('close', () => {
+      if (buffer.trim()) {
+        logger.debug('TCP server: processing remaining buffer on close')
+        processLine(buffer, db, provider)
+        buffer = ''
       }
     })
 

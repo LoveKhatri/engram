@@ -14,9 +14,8 @@ export function openDb(): DB {
 
   fs.mkdirSync(path.dirname(paths.dbFile), { recursive: true })
 
-  console.log(`Opening database at ${paths.dbFile}`)
   const db = new Database(paths.dbFile)
-  console.log('A')
+
   // Load the sqlite-vec extension for vector similarity search
   sqliteVec.load(db)
 
