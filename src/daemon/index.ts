@@ -15,10 +15,12 @@ async function main(): Promise<void> {
   const db = openDb()
   const provider = createProvider(config)
 
-  startTcpServer(config.daemon.port, db, provider)
+  const ollamaHost = config.provider.type === 'ollama' ? config.ollama.host : undefined
+
+  startTcpServer(config.daemon.port, db, provider, ollamaHost)
 
   const watchDir = config.screenshots.watchDir || paths.defaultScreenshotsDir
-  await startScreenshotWatcher(watchDir, db, provider)
+  await startScreenshotWatcher(watchDir, db, provider, ollamaHost)
 
   fs.mkdirSync(path.dirname(paths.pidFile), { recursive: true })
   fs.writeFileSync(paths.pidFile, String(process.pid), 'utf-8')

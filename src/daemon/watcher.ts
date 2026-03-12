@@ -11,7 +11,8 @@ const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
 export async function startScreenshotWatcher(
   dir: string,
   db: DB,
-  provider: EmbeddingProvider
+  provider: EmbeddingProvider,
+  ollamaHost?: string
 ): Promise<void> {
   const watcher = chokidar.watch(dir, {
     ignoreInitial: true,
@@ -33,7 +34,8 @@ export async function startScreenshotWatcher(
           createdAt: Math.floor(Date.now() / 1000),
         },
         db,
-        provider
+        provider,
+        ollamaHost
       )
     })().catch((err) => {
       logger.warn(

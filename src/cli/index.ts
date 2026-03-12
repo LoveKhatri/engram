@@ -3,6 +3,7 @@ import { Command } from 'commander'
 import { registerDaemonCommands } from './daemon'
 import { registerSearchCommand } from './search'
 import { registerTodoCommands } from './todo'
+import { registerWebCommand } from './web'
 import { setDebug } from '../utils/logger'
 import fs from 'fs';
 import path from 'path';
@@ -27,5 +28,6 @@ program
 registerDaemonCommands(program)
 registerSearchCommand(program)
 registerTodoCommands(program)
+registerWebCommand(program)
 
 program.parse(process.argv)

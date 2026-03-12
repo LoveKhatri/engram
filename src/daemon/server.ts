@@ -14,7 +14,7 @@ interface ShellHookPayload {
   createdAt: number
 }
 
-function processLine(line: string, db: DB, provider: EmbeddingProvider): void {
+function processLine(line: string, db: DB, provider: EmbeddingProvider, ollamaHost?: string): void {
   const trimmed = line.trim()
   if (!trimmed) return
 
@@ -39,12 +39,17 @@ function processLine(line: string, db: DB, provider: EmbeddingProvider): void {
 
   logger.debug('TCP server: dispatching event to pipeline', `type=${event.type}`)
 
-  processPipeline(event, db, provider).catch((err) => {
+  processPipeline(event, db, provider, ollamaHost).catch((err) => {
     logger.error('Pipeline error', err instanceof Error ? err : new Error(String(err)))
   })
 }
 
-export function startTcpServer(port: number, db: DB, provider: EmbeddingProvider): void {
+export function startTcpServer(
+  port: number,
+  db: DB,
+  provider: EmbeddingProvider,
+  ollamaHost?: string
+): void {
   const server = net.createServer((socket) => {
     let buffer = ''
 
@@ -56,15 +61,14 @@ export function startTcpServer(port: number, db: DB, provider: EmbeddingProvider
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
-        processLine(line, db, provider)
+        processLine(line, db, provider, ollamaHost)
       }
     })
 
     socket.on('end', () => {
-      // Process any remaining data in the buffer when the connection closes
       if (buffer.trim()) {
         logger.debug('TCP server: processing remaining buffer on end')
-        processLine(buffer, db, provider)
+        processLine(buffer, db, provider, ollamaHost)
         buffer = ''
       }
     })
@@ -72,7 +76,7 @@ export function startTcpServer(port: number, db: DB, provider: EmbeddingProvider
     socket.on('close', () => {
       if (buffer.trim()) {
         logger.debug('TCP server: processing remaining buffer on close')
-        processLine(buffer, db, provider)
+        processLine(buffer, db, provider, ollamaHost)
         buffer = ''
       }
     })
