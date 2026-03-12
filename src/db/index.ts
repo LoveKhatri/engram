@@ -3,6 +3,7 @@ import * as sqliteVec from 'sqlite-vec'
 import fs from 'fs'
 import path from 'path'
 import { paths } from '../utils/paths'
+import { runMigrations } from './migrate'
 
 export type DB = Database.Database
 
@@ -20,6 +21,8 @@ export function openDb(): DB {
 
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
+
+  runMigrations(db)
 
   _db = db
   return db
