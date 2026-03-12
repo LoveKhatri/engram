@@ -57,6 +57,35 @@ function formatBytes(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+const HOOK_START = '# engram:hook:start'
+const HOOK_END = '# engram:hook:end'
+
+function installHook(rcFile: string, content: string): 'installed' | 'updated' {
+  let existing = ''
+  try {
+    existing = fs.readFileSync(rcFile, 'utf-8')
+  } catch {
+    // rc file doesn't exist yet — will be created on write
+  }
+
+  const startIdx = existing.indexOf(HOOK_START)
+  const endIdx = existing.indexOf(HOOK_END)
+  const block = `${HOOK_START}\n${content}${HOOK_END}\n`
+
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    const before = existing.slice(0, startIdx)
+    const after = existing.slice(endIdx + HOOK_END.length)
+    // Trim any trailing blank line before the block and leading blank line after
+    fs.writeFileSync(rcFile, before.trimEnd() + '\n\n' + block + after.trimStart(), 'utf-8')
+    return 'updated'
+  }
+
+  // No markers found — append fresh
+  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : ''
+  fs.appendFileSync(rcFile, `${prefix}\n${block}`, 'utf-8')
+  return 'installed'
+}
+
 function promptConfirm(question: string): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
@@ -240,24 +269,36 @@ export function registerDaemonCommands(program: Command): void {
       if (shellName === 'bash') {
         rcFile = path.join(os.homedir(), '.bashrc')
         snippet = (port) =>
-          `\n# engram shell hook — managed by engram init\n` +
           `export ENGRAM_SESSION_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 8)\n\n` +
+          // DEBUG trap fires before each command; store it so PROMPT_COMMAND can read it
+          `__engram_debug_trap() {\n` +
+          `  [[ "\${BASH_COMMAND}" == __engram_hook ]] && return\n` +
+          `  __ENGRAM_LAST_CMD="\${BASH_COMMAND}"\n` +
+          `}\n` +
+          `trap '__engram_debug_trap' DEBUG\n\n` +
           `__engram_hook() {\n` +
           `  local exit_code=$?\n` +
-          `  local cmd\n` +
-          `  cmd=$(HISTTIMEFORMAT= history 1 | sed 's/^[ ]*[0-9]*[ ]*//')\n` +
+          `  local cmd="\${__ENGRAM_LAST_CMD}"\n` +
+          `  __ENGRAM_LAST_CMD=''\n` +
+          `  [[ -z "$cmd" ]] && return\n` +
           `  local json="{\\\"type\\\":\\\"command\\\",\\\"content\\\":$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\\\"source\\\":\\\"$PWD\\\",\\\"exitCode\\\":$exit_code,\\\"sessionId\\\":\\\"$ENGRAM_SESSION_ID\\\",\\\"createdAt\\\":$(date +%s)}"\n` +
-          `  (echo "$json" | ncat --send-only 127.0.0.1 ${port} 2>/dev/null) &!\n` +
+          `  (echo "$json" | ncat --send-only 127.0.0.1 ${port} 2>/dev/null) &\n` +
           `}\n\n` +
           `PROMPT_COMMAND="__engram_hook\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"\n`
       } else if (shellName === 'zsh') {
         rcFile = path.join(os.homedir(), '.zshrc')
         snippet = (port) =>
-          `\n# engram shell hook — managed by engram init\n` +
           `export ENGRAM_SESSION_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 8 2>/dev/null)\n\n` +
+          // preexec fires right before each command executes and receives the command as $1
+          `__engram_preexec() {\n` +
+          `  __ENGRAM_LAST_CMD="$1"\n` +
+          `}\n` +
+          `preexec_functions+=(__engram_preexec)\n\n` +
           `__engram_hook() {\n` +
           `  local exit_code=$?\n` +
-          `  local cmd=$history[$HISTCMD]\n` +
+          `  local cmd="$__ENGRAM_LAST_CMD"\n` +
+          `  __ENGRAM_LAST_CMD=''\n` +
+          `  [[ -z "$cmd" ]] && return\n` +
           `  local json="{\\\"type\\\":\\\"command\\\",\\\"content\\\":$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\\\"source\\\":\\\"$PWD\\\",\\\"exitCode\\\":$exit_code,\\\"sessionId\\\":\\\"$ENGRAM_SESSION_ID\\\",\\\"createdAt\\\":$(date +%s)}"\n` +
           `  (echo "$json" | ncat --send-only 127.0.0.1 ${port} 2>/dev/null) &!\n` +
           `}\n\n` +
@@ -268,27 +309,16 @@ export function registerDaemonCommands(program: Command): void {
         process.exit(1)
       }
 
-      let existing: string
-      try {
-        existing = fs.readFileSync(rcFile, 'utf-8')
-      } catch {
-        existing = ''
-      }
-
-      if (existing.includes('# engram shell hook')) {
-        console.log(`Shell hook already installed in ${rcFile}. Nothing to do.`)
-        return
-      }
-
       const port = loadConfig().daemon.port
+      let result: 'installed' | 'updated'
       try {
-        fs.appendFileSync(rcFile, snippet(port), 'utf-8')
+        result = installHook(rcFile, snippet(port))
       } catch (err) {
         console.error(`Failed to write to ${rcFile}: ${err instanceof Error ? err.message : String(err)}`)
         process.exit(1)
       }
 
-      console.log(`Shell hook installed in ${rcFile}`)
+      console.log(`Shell hook ${result} in ${rcFile}`)
       console.log(`Restart your shell or run: source ${rcFile}`)
     })
 
