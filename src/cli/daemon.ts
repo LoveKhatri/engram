@@ -1,10 +1,19 @@
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import type { Command } from 'commander'
-import { loadConfig } from '../config'
+import { loadConfig, saveConfig } from '../config'
 import { paths } from '../utils/paths'
+
+function checkDependency(name: string): boolean {
+  try {
+    execSync(`which ${name}`, { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
 
 function isDaemonRunning(): boolean {
   if (!fs.existsSync(paths.pidFile)) return false
@@ -33,6 +42,11 @@ export function registerDaemonCommands(program: Command): void {
         console.log('Daemon is already running')
         return
       }
+      if (!fs.existsSync(paths.configFile)) {
+        saveConfig({})
+        console.log(`Created default config at ${paths.configFile}`)
+      }
+
       // __dirname = dist/cli/ in prod; daemon is at dist/daemon/index.js
       const daemonPath = path.join(__dirname, '../daemon/index.js')
       fs.mkdirSync(path.dirname(paths.logFile), { recursive: true })
@@ -78,6 +92,17 @@ export function registerDaemonCommands(program: Command): void {
     .command('init')
     .description('Set up shell hook')
     .action(() => {
+      const missing: { name: string; pkg: string }[] = []
+      if (!checkDependency('nc'))      missing.push({ name: 'nc',      pkg: 'nmap-ncat' })
+      if (!checkDependency('python3')) missing.push({ name: 'python3', pkg: 'python3' })
+      if (missing.length > 0) {
+        for (const dep of missing) {
+          console.error(`Missing dependency: ${dep.name}`)
+          console.error(`Install it with: sudo dnf install ${dep.pkg}`)
+        }
+        process.exit(1)
+      }
+
       const shell = process.env['SHELL'] ?? ''
       const shellName = path.basename(shell)
 
@@ -93,8 +118,8 @@ export function registerDaemonCommands(program: Command): void {
           `  local exit_code=$?\n` +
           `  local cmd\n` +
           `  cmd=$(HISTTIMEFORMAT= history 1 | sed 's/^[ ]*[0-9]*[ ]*//')\n` +
-          `  echo "{\\"type\\":\\"command\\",\\"content\\":$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\\"source\\":\\"$PWD\\",\\"exitCode\\":$exit_code,\\"sessionId\\":\\"$ENGRAM_SESSION_ID\\",\\"createdAt\\":$(date +%s)}" \\\\\n` +
-          `    | nc -q 0 127.0.0.1 ${port} 2>/dev/null &\n` +
+          `  local json="{\\"type\\":\\"command\\",\\"content\\":$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\\"source\\":\\"$PWD\\",\\"exitCode\\":$exit_code,\\"sessionId\\":\\"$ENGRAM_SESSION_ID\\",\\"createdAt\\":$(date +%s)}"\n` +
+          `  (echo "$json" | nc -q 0 127.0.0.1 ${port} 2>/dev/null) &!\n` +
           `}\n\n` +
           `PROMPT_COMMAND="__engram_hook\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"\n`
       } else if (shellName === 'zsh') {
@@ -105,8 +130,8 @@ export function registerDaemonCommands(program: Command): void {
           `__engram_hook() {\n` +
           `  local exit_code=$?\n` +
           `  local cmd=$history[$HISTCMD]\n` +
-          `  echo "{\\"type\\":\\"command\\",\\"content\\":$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\\"source\\":\\"$PWD\\",\\"exitCode\\":$exit_code,\\"sessionId\\":\\"$ENGRAM_SESSION_ID\\",\\"createdAt\\":$(date +%s)}" \\\\\n` +
-          `    | nc -q 0 127.0.0.1 ${port} 2>/dev/null &\n` +
+          `  local json="{\\"type\\":\\"command\\",\\"content\\":$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),\\"source\\":\\"$PWD\\",\\"exitCode\\":$exit_code,\\"sessionId\\":\\"$ENGRAM_SESSION_ID\\",\\"createdAt\\":$(date +%s)}"\n` +
+          `  (echo "$json" | nc -q 0 127.0.0.1 ${port} 2>/dev/null) &!\n` +
           `}\n\n` +
           `precmd_functions+=(__engram_hook)\n`
       } else {
