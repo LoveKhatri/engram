@@ -1,8 +1,8 @@
 import path from 'path'
 import chokidar from 'chokidar'
-import { createWorker } from 'tesseract.js'
 import type { DB } from '../db'
 import type { EmbeddingProvider } from '../providers/types'
+import { extractText } from '../ocr'
 import { processPipeline } from './pipeline'
 import { logger } from '../utils/logger'
 
@@ -13,8 +13,6 @@ export async function startScreenshotWatcher(
   db: DB,
   provider: EmbeddingProvider
 ): Promise<void> {
-  const worker = await createWorker('eng')
-
   const watcher = chokidar.watch(dir, {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 1000, pollInterval: 200 },
@@ -24,8 +22,7 @@ export async function startScreenshotWatcher(
     if (!IMAGE_EXTS.has(path.extname(filePath).toLowerCase())) return
 
     ;(async () => {
-      const { data } = await worker.recognize(filePath)
-      const text = data.text.trim()
+      const text = await extractText(filePath)
       if (!text) return
 
       await processPipeline(

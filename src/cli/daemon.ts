@@ -79,6 +79,7 @@ type ConfigLeaf =
   | 'daemon.port'
   | 'search.maxResults'
   | 'screenshots.watchDir'
+  | 'debug'
 
 const VALID_KEYS: ConfigLeaf[] = [
   'provider.type',
@@ -88,16 +89,25 @@ const VALID_KEYS: ConfigLeaf[] = [
   'daemon.port',
   'search.maxResults',
   'screenshots.watchDir',
+  'debug',
 ]
 
 function getNestedValue(obj: EngramConfig, dotKey: string): unknown {
-  const [section, field] = dotKey.split('.')
-  return (obj as unknown as Record<string, Record<string, unknown>>)[section]?.[field]
+  const parts = dotKey.split('.')
+  if (parts.length === 1) {
+    return (obj as unknown as Record<string, unknown>)[parts[0]!]
+  }
+  const [section, field] = parts
+  return (obj as unknown as Record<string, Record<string, unknown>>)[section!]?.[field!]
 }
 
 function buildPartial(dotKey: string, value: unknown): Partial<EngramConfig> {
-  const [section, field] = dotKey.split('.')
-  return { [section]: { [field]: value } } as unknown as Partial<EngramConfig>
+  const parts = dotKey.split('.')
+  if (parts.length === 1) {
+    return { [parts[0]!]: value } as unknown as Partial<EngramConfig>
+  }
+  const [section, field] = parts
+  return { [section!]: { [field!]: value } } as unknown as Partial<EngramConfig>
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +379,8 @@ export function registerDaemonCommands(program: Command): void {
         ``,
         `[search]`,
         `max_results = ${config.search.maxResults}`,
+        ``,
+        `debug = ${config.debug}`,
         ``,
       ].join('\n')
 

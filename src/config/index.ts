@@ -10,15 +10,17 @@ export interface EngramConfig {
     screenshots: { watchDir: string }
     daemon: { port: number }
     search: { maxResults: number }
+    debug: boolean
 }
 
 const DEFAULTS: EngramConfig = {
     provider: { type: 'ollama' },
     ollama: { host: 'http://localhost:11434', model: 'nomic-embed-text' },
-    gemini: { model: 'text-embedding-004' },
+    gemini: { model: 'gemini-embedding-2-preview' },
     screenshots: { watchDir: '' },
     daemon: { port: 7842 },
     search: { maxResults: 10 },
+    debug: false,
 }
 
 function deepMerge<T>(defaults: T, overrides: Partial<T>): T {
@@ -51,6 +53,8 @@ function applyEnvOverrides(config: EngramConfig): EngramConfig {
 
     if (process.env['ENGRAM_SCREENSHOTS_DIR']) c.screenshots.watchDir = process.env['ENGRAM_SCREENSHOTS_DIR']!
 
+    if (process.env['ENGRAM_DEBUG'] === 'true') c.debug = true
+
     return c
 }
 
@@ -74,6 +78,8 @@ function normaliseParsed(raw: Record<string, unknown>): Partial<EngramConfig> {
         const s = raw['search'] as Record<string, unknown>
         result.search = { maxResults: (s['max_results'] as number) ?? DEFAULTS.search.maxResults }
     }
+
+    if (typeof raw['debug'] === 'boolean') result.debug = raw['debug']
 
     return result
 }
@@ -125,6 +131,8 @@ export function saveConfig(partial: Partial<EngramConfig>): void {
         ``,
         `[search]`,
         `max_results = ${updated.search.maxResults}`,
+        ``,
+        `debug = ${updated.debug}`,
         ``,
     ]
 

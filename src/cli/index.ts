@@ -3,6 +3,7 @@ import { Command } from 'commander'
 import { registerDaemonCommands } from './daemon'
 import { registerSearchCommand } from './search'
 import { registerTodoCommands } from './todo'
+import { setDebug } from '../utils/logger'
 import fs from 'fs';
 import path from 'path';
 
@@ -16,6 +17,12 @@ program
     .name('engram')
     .description('Passive CLI daemon for semantic terminal history search')
     .version(version || '0.0.0')
+    .option('--debug', 'Enable debug logging')
+    .hook('preAction', (cmd) => {
+        if ((cmd.opts() as { debug?: boolean }).debug) {
+            setDebug(true)
+        }
+    })
 
 registerDaemonCommands(program)
 registerSearchCommand(program)

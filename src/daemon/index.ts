@@ -4,12 +4,14 @@ import { loadConfig } from '../config'
 import { openDb } from '../db'
 import { createProvider } from '../providers/types'
 import { paths } from '../utils/paths'
-import { logger } from '../utils/logger'
+import { logger, setDebug } from '../utils/logger'
 import { startTcpServer } from './server'
 import { startScreenshotWatcher } from './watcher'
 
 async function main(): Promise<void> {
   const config = loadConfig()
+  if (config.debug) setDebug(true)
+
   const db = openDb()
   const provider = createProvider(config)
 
